@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>チンチロ - カジノサイコロゲーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- セットアップ画面 -->
+<div id="setup-screen" class="screen active">
+  <div class="setup-container">
+    <div class="logo-area">
+      <div class="dice-logo">🎲</div>
+      <h1>チンチロ</h1>
+      <p class="subtitle">🎰 本格カジノサイコロゲーム 🎰</p>
+    </div>
+    <div class="setup-card">
+      <h2>プレイヤー設定</h2>
+      <div class="player-count-selector">
+        <label>プレイヤー人数</label>
+        <div class="count-btns">
+          <button class="count-btn active" data-count="2">2人</button>
+          <button class="count-btn" data-count="3">3人</button>
+          <button class="count-btn" data-count="4">4人</button>
+          <button class="count-btn" data-count="5">5人</button>
+          <button class="count-btn" data-count="6">6人</button>
+        </div>
+      </div>
+      <div id="player-names-container"></div>
+      <div class="rounds-setting">
+        <label>ラウンド数</label>
+        <div class="count-btns">
+          <button class="round-btn active" data-rounds="3">3R</button>
+          <button class="round-btn" data-rounds="5">5R</button>
+          <button class="round-btn" data-rounds="10">10R</button>
+        </div>
+      </div>
+      <div class="coin-setting">
+        <label>初期コイン枚数</label>
+        <div class="count-btns">
+          <button class="coin-btn active" data-coins="100">100枚</button>
+          <button class="coin-btn" data-coins="500">500枚</button>
+          <button class="coin-btn" data-coins="1000">1000枚</button>
+        </div>
+      </div>
+      <button id="start-btn" class="btn-primary">🎰 ゲームスタート！</button>
+    </div>
+  </div>
+</div>
+
+<!-- ベット画面 (各プレイヤーの番の前) -->
+<div id="bet-screen" class="screen">
+  <div class="bet-container">
+    <div class="bet-header">
+      <div class="bet-player-badge" id="bet-player-name">プレイヤー1</div>
+      <div class="bet-coins-display">💰 <span id="bet-current-coins">100</span> コイン</div>
+    </div>
+    <h2>ベット額を決めてください</h2>
+    <div class="bet-amount-display">
+      <span id="bet-amount">10</span>
+      <span class="bet-unit">コイン</span>
+    </div>
+    <div class="bet-slider-area">
+      <input type="range" id="bet-slider" min="1" max="100" value="10" class="bet-slider">
+      <div class="bet-presets">
+        <button class="bet-preset-btn" data-pct="10">10%</button>
+        <button class="bet-preset-btn" data-pct="25">25%</button>
+        <button class="bet-preset-btn" data-pct="50">半分</button>
+        <button class="bet-preset-btn" data-pct="100">全賭け！</button>
+      </div>
+    </div>
+    <button id="bet-confirm-btn" class="btn-primary">この額でベット！</button>
+  </div>
+</div>
+
+<!-- ゲーム画面 -->
+<div id="game-screen" class="screen">
+  <div class="game-layout">
+    <!-- 左サイドバー -->
+    <aside class="sidebar">
+      <div class="scoreboard">
+        <h3>💰 コインランキング</h3>
+        <div id="score-list"></div>
+      </div>
+      <div class="round-info">
+        <div class="round-badge">ラウンド <span id="current-round">1</span> / <span id="total-rounds">3</span></div>
+      </div>
+      <!-- 出目履歴 -->
+      <div class="history-panel">
+        <h3>📜 出目履歴</h3>
+        <div id="dice-history"></div>
+      </div>
+      <button id="show-rules-btn" class="btn-rules">📋 役表を見る</button>
+    </aside>
+
+    <!-- メインエリア -->
+    <main class="main-area">
+      <div class="turn-header">
+        <div class="current-player-badge">
+          <span id="current-player-name">プレイヤー1</span> のターン
+        </div>
+        <div class="turn-info-right">
+          <div class="bet-badge">ベット: <span id="current-bet">0</span>💰</div>
+          <div class="roll-count-display">残り: <span id="rolls-left">2</span>回</div>
+        </div>
+      </div>
+
+      <div class="dice-arena">
+        <!-- どんぶり演出 -->
+        <div id="bowl-overlay" class="bowl-overlay hidden">
+          <div class="bowl-scene" id="bowl-scene">
+            <div class="bowl-wrap">
+              <div class="bowl-rim"></div>
+              <div class="bowl-body">
+                <div class="bowl-dice-container">
+                  <div class="bowl-die" id="bdice-0">🎲</div>
+                  <div class="bowl-die" id="bdice-1">🎲</div>
+                  <div class="bowl-die" id="bdice-2">🎲</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="bowl-text" id="bowl-text">振っています…</p>
+        </div>
+        <div class="dice-container">
+          <div class="die" id="die-0"><span>🎲</span></div>
+          <div class="die" id="die-1"><span>🎲</span></div>
+          <div class="die" id="die-2"><span>🎲</span></div>
+        </div>
+        <div id="hand-result" class="hand-result hidden"></div>
+      </div>
+
+      <div class="action-area">
+        <button id="roll-btn" class="btn-roll">🎲 サイコロを振る！</button>
+        <button id="next-btn" class="btn-next hidden">次のプレイヤーへ →</button>
+      </div>
+
+      <div class="round-log-container">
+        <h3>📝 このラウンドの結果</h3>
+        <div id="round-log"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 結果画面 -->
+<div id="result-screen" class="screen">
+  <div class="result-container">
+    <div id="winner-display"></div>
+    <div class="final-scores">
+      <h2>最終コイン</h2>
+      <div id="final-score-list"></div>
+    </div>
+    <button id="restart-btn" class="btn-primary">🔄 もう一度遊ぶ</button>
+  </div>
+</div>
+
+<!-- 役表モーダル -->
+<div id="rules-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <button class="modal-close" id="close-rules">✕</button>
+    <h2>🎲 チンチロ 役表</h2>
+    <p class="rules-intro">3つのサイコロを振って役を作ります。最大2回まで振れます。</p>
+    <div class="rules-grid">
+      <div class="rule-card special win">
+        <div class="rule-name">ピンゾロ</div>
+        <div class="rule-dice">⚀⚀⚀</div>
+        <div class="rule-desc">1・1・1 = 最強！ベット3倍獲得</div>
+        <div class="rule-rank rank-s">★ 最強</div>
+      </div>
+      <div class="rule-card win">
+        <div class="rule-name">シゴロ</div>
+        <div class="rule-dice">⚃⚄⚅</div>
+        <div class="rule-desc">4・5・6 = 自動勝利。ベット2倍獲得</div>
+        <div class="rule-rank rank-a">A</div>
+      </div>
+      <div class="rule-card win">
+        <div class="rule-name">ゾロ目</div>
+        <div class="rule-dice">⚅⚅⚅</div>
+        <div class="rule-desc">同じ目が3つ。数が大きいほど強い（6>5>…>1）</div>
+        <div class="rule-rank rank-b">B</div>
+      </div>
+      <div class="rule-card win">
+        <div class="rule-name">目あり（出目）</div>
+        <div class="rule-dice">⚄⚄⚂</div>
+        <div class="rule-desc">2つが同じ目 → 残り1つが得点(1〜6)</div>
+        <div class="rule-rank rank-c">C</div>
+      </div>
+      <div class="rule-card lose">
+        <div class="rule-name">ヒフミ</div>
+        <div class="rule-dice">⚀⚁⚂</div>
+        <div class="rule-desc">1・2・3 = 自動敗北。ベット没収</div>
+        <div class="rule-rank rank-d">✕ 負け</div>
+      </div>
+      <div class="rule-card neutral">
+        <div class="rule-name">目なし（ションベン）</div>
+        <div class="rule-dice">⚀⚂⚅</div>
+        <div class="rule-desc">役なし。もう1回振れる（計2回まで）</div>
+        <div class="rule-rank rank-e">△ 振り直し</div>
+      </div>
+    </div>
+    <div class="rules-note">
+      <h3>💰 コインの動き</h3>
+      <ol>
+        <li>各ターン開始前にベット額を決める</li>
+        <li>1位は全員のベット総額を総取り！</li>
+        <li>ピンゾロは3倍、シゴロは2倍</li>
+        <li>全ラウンド終了後、最多コインが優勝</li>
+      </ol>
+    </div>
+    <div class="strength-chart">
+      <h3>💪 強さ順</h3>
+      <div class="strength-bar">
+        <span class="s-rank">ピンゾロ</span><span class="arrow">›</span>
+        <span class="a-rank">シゴロ</span><span class="arrow">›</span>
+        <span class="b-rank">ゾロ目(高→低)</span><span class="arrow">›</span>
+        <span class="c-rank">出目(高→低)</span><span class="arrow">›</span>
+        <span class="d-rank">ヒフミ</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
