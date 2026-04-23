@@ -57,19 +57,22 @@ function playDieLock(freq=880){
 }
 
 // ── 役判定 ──
-// ペイアウト倍率: 役に応じてベット額に乗算
-const PAYOUT = { pinzoro:3, auto_win:2, triple:1.5, point:1, auto_lose:-1, none:0 };
+// 勝者の倍率（敏者のベットに掛ける）
+const WIN_MULT  = { pinzoro:3, auto_win:2, triple:1, point:1, auto_lose:1, none:1 };
+// 敗者のペナルティ倍率（自分のベットに掛ける）
+const LOSE_MULT = { pinzoro:1, auto_win:1, triple:1, point:1, auto_lose:2, none:1 };
 
 function evaluateHand(dice){
   const d=[...dice].sort((a,b)=>a-b), [a,b,c]=d;
-  if(a===4&&b===5&&c===6) return{name:'シゴロ！',type:'auto_win',value:1000,payout:PAYOUT.auto_win};
-  if(a===1&&b===2&&c===3) return{name:'ヒフミ…',type:'auto_lose',value:-1000,payout:PAYOUT.auto_lose};
-  if(a===1&&b===1&&c===1) return{name:'ピンゾロ！！',type:'pinzoro',value:2000,payout:PAYOUT.pinzoro};
-  if(a===b&&b===c) return{name:`ゾロ目 (${a})`,type:'triple',value:100+a*10,payout:PAYOUT.triple};
-  if(a===b) return{name:`出目 ${c}`,type:'point',value:c,payout:PAYOUT.point};
-  if(b===c) return{name:`出目 ${a}`,type:'point',value:a,payout:PAYOUT.point};
-  if(a===c) return{name:`出目 ${b}`,type:'point',value:b,payout:PAYOUT.point};
-  return{name:'目なし',type:'none',value:-500,payout:PAYOUT.none};
+  // ピンゾロ → シゴロ → ヒフミ → ゾロ目 → 出目 → 目なしの順番で判定
+  if(a===1&&b===1&&c===1) return{name:'ピンゾロ！！',type:'pinzoro', value:2000};
+  if(a===4&&b===5&&c===6) return{name:'シゴロ！',  type:'auto_win', value:1000};
+  if(a===1&&b===2&&c===3) return{name:'ヒフミ…',  type:'auto_lose',value:-1000};
+  if(a===b&&b===c)        return{name:`ゾロ目(${a})`, type:'triple',   value:100+a*10};
+  if(a===b) return{name:`出目 ${c}`,type:'point',value:c};
+  if(b===c) return{name:`出目 ${a}`,type:'point',value:a};
+  if(a===c) return{name:`出目 ${b}`,type:'point',value:b};
+  return{name:'目なし',type:'none',value:-500};
 }
 function handClass(h){
   if(h.type==='pinzoro') return'special';
@@ -264,6 +267,12 @@ function processResult(){
   const glow=dieGlow(hand);
   if(hand.type==='none'&&rollsLeft>0){
     showHandResult('目なし…もう一度！','neutral');
+    // 目なしは軽いシェイク演出
+    [0,1,2].forEach((i,n)=>setTimeout(()=>{
+      const d=document.getElementById(`die-${i}`);
+      d.style.animation='none'; void d.offsetWidth;
+      d.style.animation='dieShake .4s ease-in-out';
+    },n*80));
     document.getElementById('roll-btn').disabled=false;
     gamePhase='rolled'; return;
   }
@@ -273,18 +282,21 @@ function processResult(){
   if(glow) for(let i=0;i<3;i++) document.getElementById(`die-${i}`).classList.add(glow);
   showHandResult(finalHand.name,handClass(finalHand));
 
-  // 音と豪華演出
+  // 役に応じた演出
   const sc=handClass(finalHand);
   if(finalHand.type==='pinzoro'){ playRevealSound('pinzoro'); showSpectacular('pinzoro'); }
   else if(finalHand.type==='auto_win'){ playRevealSound('win'); showSpectacular('sigoro'); }
   else if(finalHand.type==='triple'){ playRevealSound('win'); showSpectacular('triple'); }
   else if(sc==='lose'){ playRevealSound('lose'); showSpectacular('lose'); }
-  else if(sc==='win'||sc==='neutral') playRevealSound('win');
-  else playRevealSound('neutral');
+  else if(finalHand.type==='point'){
+    playRevealSound(finalHand.value>=4?'win':'neutral');
+    showNormalEffect(finalHand.value>=4?'good':'neutral', finalHand.name);
+  } else {
+    playRevealSound('neutral');
+    showNormalEffect('neutral', finalHand.name);
+  }
 
-  // 履歴に追加
   addHistory(players[currentPlayerIndex], finalHand, currentDice);
-
   roundResults.push({player:players[currentPlayerIndex],playerIndex:currentPlayerIndex,hand:finalHand,dice:[...currentDice],bet:bets[currentPlayerIndex]});
   addLogItem(players[currentPlayerIndex],finalHand,currentDice,bets[currentPlayerIndex]);
 
@@ -296,6 +308,26 @@ function processResult(){
     document.getElementById('next-btn').onclick=goNextPlayer;
   }
   document.getElementById('next-btn').classList.remove('hidden');
+}
+
+// 通常演出（出目・目なし）
+function showNormalEffect(level, handName){
+  const arena=document.querySelector('.dice-arena');
+
+  // ダイスが1つずつポップ
+  [0,1,2].forEach((i,n)=>setTimeout(()=>{
+    const d=document.getElementById(`die-${i}`);
+    d.style.animation='none'; void d.offsetWidth;
+    d.style.animation='dieAppear .45s cubic-bezier(.17,.67,.3,1.4) both';
+  },n*120));
+
+  // levelに応じたリップル
+  const color = level==='good'?'rgba(76,218,128,':'rgba(136,144,176,';
+  const ripple=document.createElement('div');
+  ripple.style.cssText=`position:absolute;inset:0;border-radius:20px;pointer-events:none;`+
+    `animation:rippleOut .6s ease-out forwards;background:${color}.15);`;
+  arena.appendChild(ripple);
+  setTimeout(()=>ripple.remove(), 700);
 }
 
 function showHandResult(text,cls){
@@ -332,7 +364,7 @@ function finishRound(){
   const sorted=[...roundResults].sort((a,b)=>b.hand.value-a.hand.value);
   const allSame=sorted[0].hand.value===sorted[sorted.length-1].hand.value;
 
-  // まず全員のベットを返却（初期化）
+  // 全員のベットを返却（ここから勝敗による差引を計算）
   roundResults.forEach(r=>{ coins[r.playerIndex]+=r.bet; });
 
   if(allSame){
@@ -340,24 +372,25 @@ function finishRound(){
   } else {
     const winners=sorted.filter(r=>r.hand.value===sorted[0].hand.value);
     const losers =sorted.filter(r=>r.hand.value!==sorted[0].hand.value);
-    const transfers=[]; // [{from, to, amount}]
+    const transfers=[];
 
     winners.forEach(w=>{
+      const wMult=WIN_MULT[w.hand.type]||1; // 勝者の倍率
       losers.forEach(l=>{
-        // 略奔額 = 略奔者のベット × 勝者のペイアウト倍率、複数勝者は分割
-        const raw=Math.floor(l.bet*w.hand.payout/winners.length);
-        const steal=Math.min(raw, coins[l.playerIndex]); // コイン以上は奪えない
+        const lMult=LOSE_MULT[l.hand.type]||1; // 敗者ペナルティ（ヒフミは×2）
+        // 移転額 = 敗者のベット × 敗者ペナルティ × 勝者倍率 ÷ 勝者人数
+        const raw=Math.floor(l.bet*lMult*wMult/winners.length);
+        const steal=Math.min(raw, coins[l.playerIndex]);
         coins[l.playerIndex]-=steal;
         coins[w.playerIndex]+=steal;
         if(steal>0) transfers.push({from:l.playerIndex,to:w.playerIndex,amount:steal});
       });
     });
 
-    // フローティングコイン演出
     setTimeout(()=>showTransferAnims(transfers), 200);
-    // ラウンドメッセージ
     const w0=winners[0];
-    showRoundMsg(`🏆 ${players[w0.playerIndex]}の勝利！${transfers.reduce((s,t)=>t.to===w0.playerIndex?s+t.amount:s,0)}コイン略奔`);
+    const total=transfers.reduce((s,t)=>t.to===w0.playerIndex?s+t.amount:s,0);
+    showRoundMsg(`🏆 ${players[w0.playerIndex]}の勝利！${total}コイン獅得`);
   }
 
   updateScoreboard();
