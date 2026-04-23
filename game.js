@@ -330,32 +330,73 @@ function goNextPlayer(){
 // ── ラウンド終了 ──
 function finishRound(){
   const sorted=[...roundResults].sort((a,b)=>b.hand.value-a.hand.value);
-  const totalPot=roundResults.reduce((s,r)=>s+r.bet,0);
+  const allSame=sorted[0].hand.value===sorted[sorted.length-1].hand.value;
 
-  if(sorted.length>0){
-    const topVal=sorted[0].hand.value;
-    const botVal=sorted[sorted.length-1].hand.value;
-    if(topVal!==botVal){
-      // 1位グループが鍋を分ける
-      const winners=sorted.filter(r=>r.hand.value===topVal);
-      winners.forEach(r=>{
-        const mult=r.hand.payout;
-        coins[r.playerIndex]+=Math.floor(totalPot/winners.length*mult);
+  // まず全員のベットを返却（初期化）
+  roundResults.forEach(r=>{ coins[r.playerIndex]+=r.bet; });
+
+  if(allSame){
+    showRoundMsg('全員引き分け！コイン返却');
+  } else {
+    const winners=sorted.filter(r=>r.hand.value===sorted[0].hand.value);
+    const losers =sorted.filter(r=>r.hand.value!==sorted[0].hand.value);
+    const transfers=[]; // [{from, to, amount}]
+
+    winners.forEach(w=>{
+      losers.forEach(l=>{
+        // 略奔額 = 略奔者のベット × 勝者のペイアウト倍率、複数勝者は分割
+        const raw=Math.floor(l.bet*w.hand.payout/winners.length);
+        const steal=Math.min(raw, coins[l.playerIndex]); // コイン以上は奪えない
+        coins[l.playerIndex]-=steal;
+        coins[w.playerIndex]+=steal;
+        if(steal>0) transfers.push({from:l.playerIndex,to:w.playerIndex,amount:steal});
       });
-      // 負け組はbet没収済み（showBetScreenで引いてある）
-    } else {
-      // 引き分け→全員ベット返却
-      roundResults.forEach(r=>{ coins[r.playerIndex]+=r.bet; });
-    }
+    });
+
+    // フローティングコイン演出
+    setTimeout(()=>showTransferAnims(transfers), 200);
+    // ラウンドメッセージ
+    const w0=winners[0];
+    showRoundMsg(`🏆 ${players[w0.playerIndex]}の勝利！${transfers.reduce((s,t)=>t.to===w0.playerIndex?s+t.amount:s,0)}コイン略奔`);
   }
 
   updateScoreboard();
-  if(currentRound>=totalRounds){ showResult(); return; }
-  currentRound++;
-  currentPlayerIndex=0;
-  roundResults=[];
-  document.getElementById('round-log').innerHTML='';
-  showBetScreen();
+  const delay=allSame?500:2200;
+  setTimeout(()=>{
+    if(currentRound>=totalRounds){ showResult(); return; }
+    currentRound++; currentPlayerIndex=0;
+    roundResults=[]; document.getElementById('round-log').innerHTML='';
+    showBetScreen();
+  }, delay);
+}
+
+function showRoundMsg(msg){
+  const el=document.createElement('div');
+  el.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(13,15,26,.95);border:2px solid #f0c040;border-radius:16px;padding:20px 36px;font-size:20px;font-weight:900;color:#f0c040;z-index:300;text-align:center;animation:popIn .4s cubic-bezier(.17,.67,.4,1.3)';
+  el.textContent=msg; document.body.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); },2000);
+}
+
+function showTransferAnims(transfers){
+  transfers.forEach(({from,to,amount})=>{
+    // 勝者にプラス表示
+    showFloatCoin(`+${amount}💰`, '#4cda80', to);
+    // 敛者にマイナス表示
+    showFloatCoin(`-${amount}💰`, '#e05c5c', from);
+  });
+}
+
+function showFloatCoin(text, color, playerIdx){
+  // スコアボードの対応アイテムに対してフロート
+  const items=document.querySelectorAll('.score-item');
+  const target=items[playerIdx];
+  if(!target) return;
+  const rect=target.getBoundingClientRect();
+  const el=document.createElement('div');
+  el.style.cssText=`position:fixed;left:${rect.left+rect.width/2}px;top:${rect.top}px;color:${color};font-size:18px;font-weight:900;pointer-events:none;z-index:400;transform:translateX(-50%);animation:floatUp 1.2s ease-out forwards;text-shadow:0 2px 8px rgba(0,0,0,.8);`;
+  el.textContent=text;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),1300);
 }
 
 // ── スコアボード ──
