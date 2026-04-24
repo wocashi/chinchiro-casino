@@ -327,13 +327,14 @@ function activateSkill(){
     o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+.5);
   });
 
-  // 3秒後にオーバーレイを閉じて自動ロール
+  // 3秒後にオーバーレイを閉じてロールを可能に
   setTimeout(()=>{
     ov.style.opacity='0'; ov.style.transition='opacity .4s';
     setTimeout(()=>{
       ov.remove();
       document.getElementById('roll-btn').disabled=false;
       document.getElementById('roll-btn').textContent='🔥 スキルロール！';
+      document.getElementById('skill-btn').textContent='⚡ スキル使用済み';
     }, 400);
   }, 3000);
 }
@@ -415,7 +416,8 @@ function showHandResult(text,cls){
 function addLogItem(name,hand,dice,bet){
   const log=document.getElementById('round-log');
   const sc=handClass(hand);
-  const coinChange=sc==='win'||sc==='special'?`+${Math.floor(bet*hand.payout)}💰`:sc==='lose'?`-${bet}💰`:'±0';
+  const mult=WIN_MULT[hand.type]||1;
+  const coinChange=sc==='win'||sc==='special'?`+${Math.floor(bet*mult)}💰`:sc==='lose'?`-${bet}💰`:'±0';
   const coinCls=sc==='win'||sc==='special'?'gain':sc==='lose'?'loss':'';
   const item=document.createElement('div'); item.className='log-item';
   item.innerHTML=`<span class="log-name">${name}</span><span class="log-dice">${dice.map(d=>FACES[d]).join(' ')}</span><span class="log-hand">${hand.name}</span><span class="log-coin ${coinCls}">${coinChange}</span>`;
