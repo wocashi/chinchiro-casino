@@ -93,6 +93,8 @@ function dieGlow(h){
 let players=[], coins=[], bets=[], totalRounds=3, currentRound=1;
 let currentPlayerIndex=0, rollsLeft=2, currentDice=[0,0,0], roundResults=[], gamePhase='waiting';
 let selectedCount=2, selectedRounds=3, selectedCoins=100;
+let skillUsed=[];      // 各プレイヤーのスキル使用済みフラグ
+let skillActiveNow=false; // 今のロールでスキル発動中
 
 // ── SETUP ──
 document.querySelectorAll('.count-btn').forEach(b=>b.addEventListener('click',()=>{
@@ -126,6 +128,7 @@ document.getElementById('start-btn').addEventListener('click',()=>{
   }
   coins=new Array(selectedCount).fill(selectedCoins);
   bets=new Array(selectedCount).fill(0);
+  skillUsed=new Array(selectedCount).fill(false); // 全員スキル未使用に
   totalRounds=selectedRounds;
   currentRound=1; currentPlayerIndex=0; roundResults=[];
   document.getElementById('total-rounds').textContent=totalRounds;
@@ -168,7 +171,7 @@ function switchScreen(id){
   document.getElementById(id).classList.add('active');
 }
 function startTurn(){
-  rollsLeft=2; currentDice=[0,0,0]; gamePhase='waiting';
+  rollsLeft=2; currentDice=[0,0,0]; gamePhase='waiting'; skillActiveNow=false;
   document.getElementById('current-round').textContent=currentRound;
   document.getElementById('current-player-name').textContent=players[currentPlayerIndex];
   document.getElementById('rolls-left').textContent=rollsLeft;
@@ -176,6 +179,15 @@ function startTurn(){
   document.getElementById('hand-result').className='hand-result hidden';
   document.getElementById('roll-btn').disabled=false;
   document.getElementById('next-btn').classList.add('hidden');
+  // スキルボタンの状態更新
+  const sb=document.getElementById('skill-btn');
+  if(skillUsed[currentPlayerIndex]){
+    sb.classList.add('used'); sb.disabled=true;
+    sb.textContent='⚡ スキル使用済み';
+  } else {
+    sb.classList.remove('used'); sb.disabled=false;
+    sb.textContent='⚡ 必殺スキル！';
+  }
   resetDiceDisplay(); updateScoreboard();
 }
 function resetDiceDisplay(){
@@ -259,7 +271,72 @@ function dramaticReveal(dice, cb){
   },1450);
 }
 
-function rand(){ return Math.floor(Math.random()*6)+1; }
+// 通常サイコロ
+function rand(){
+  if(skillActiveNow){
+    // スキル発動中: 75%の確率で良い目(4-6)
+return Math.random()<.75 ? Math.floor(Math.random()*3)+4 : Math.floor(Math.random()*3)+1;
+  }
+  return Math.floor(Math.random()*6)+1;
+}
+
+// スキルボタン
+document.getElementById('skill-btn').addEventListener('click',()=>{
+  if(skillUsed[currentPlayerIndex]||gamePhase==='done') return;
+  activateSkill();
+});
+
+function activateSkill(){
+  skillUsed[currentPlayerIndex]=true;
+  skillActiveNow=true;
+  document.getElementById('skill-btn').classList.add('used');
+  document.getElementById('skill-btn').disabled=true;
+  document.getElementById('roll-btn').disabled=true;
+
+  // 全画オーバーレイ
+  const ov=document.createElement('div'); ov.className='skill-overlay';
+  ov.innerHTML=`
+    <div class="skill-sparks" id="skill-sparks"></div>
+    <div class="skill-title">⚡ 必殺スキル ⚡</div>
+    <div class="skill-subtitle">🎰 高確率モード発動！</div>
+    <div class="skill-bar-wrap"><div class="skill-bar"></div></div>
+    <div style="margin-top:20px;color:rgba(255,255,255,.5);font-size:13px;">4・5・6 の目が出やすくなる！</div>
+  `;
+  document.body.appendChild(ov);
+
+  // スパーク演出
+  const sparks=ov.querySelector('#skill-sparks');
+  for(let i=0;i<30;i++){
+    const sp=document.createElement('div'); sp.className='skill-spark';
+    const x=(Math.random()-0.5)*200, y=(Math.random()-0.5)*200;
+    sp.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;`+
+      `--dx:${x}px;--dy:${y}px;`+
+      `background:hsl(${Math.random()*360},100%,70%);`+
+      `animation-duration:${.8+Math.random()*1.2}s;animation-delay:${Math.random()*.5}s;`;
+    sparks.appendChild(sp);
+  }
+
+  // サウンド: エネルギー上昇
+  const ctx=getAudioCtx();
+  [0,.5,1,1.5,2].forEach((t,i)=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine'; o.frequency.setValueAtTime(300+i*80, ctx.currentTime+t);
+    g.gain.setValueAtTime(.15, ctx.currentTime+t);
+    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+t+.4);
+    o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+.5);
+  });
+
+  // 3秒後にオーバーレイを閉じて自動ロール
+  setTimeout(()=>{
+    ov.style.opacity='0'; ov.style.transition='opacity .4s';
+    setTimeout(()=>{
+      ov.remove();
+      document.getElementById('roll-btn').disabled=false;
+      document.getElementById('roll-btn').textContent='🔥 スキルロール！';
+    }, 400);
+  }, 3000);
+}
 
 // ── 結果処理 ──
 function processResult(){
@@ -489,8 +566,23 @@ function showSpectacular(type){
     },i*25);
   }
   if(type==='lose') ov.style.animation='loseFlash .4s ease-in-out 3';
-  const dur=type==='pinzoro'?2800:2000;
-  setTimeout(()=>{ ov.style.opacity='0'; ov.style.transition='opacity .5s'; setTimeout(()=>ov.remove(),500); },dur);
+  // 5秒演出: 2波コンフェッティ
+  const dur=type==='pinzoro'?5000:4000;
+  // 2波目のコンフェッティ（dur/2後）
+  setTimeout(()=>{
+    for(let i=0;i<cfg.count;i++){
+      setTimeout(()=>{
+        const p=document.createElement('div'); p.className='confetti-piece';
+        p.style.left=Math.random()*100+'vw';
+        p.style.background=cfg.colors[Math.floor(Math.random()*cfg.colors.length)];
+        p.style.width=(8+Math.random()*10)+'px'; p.style.height=(8+Math.random()*10)+'px';
+        p.style.animationDuration=(1+Math.random()*1.4)+'s';
+        if(Math.random()>.5) p.style.borderRadius='50%';
+        ov.appendChild(p);
+      },i*18);
+    }
+  }, dur/2);
+  setTimeout(()=>{ ov.style.opacity='0'; ov.style.transition='opacity .6s'; setTimeout(()=>ov.remove(),600); },dur);
 }
 
 // ── ルールモーダル ──
